@@ -58,11 +58,11 @@ class EquipmentRental extends Model
 
     public function getTotalRentalCostAttribute(): float
     {
-        return round(
-            ((float) $this->daily_rate * $this->total_days)
-                + ((float) $this->fuel_liters_used * (float) $this->fuel_rate),
-            2
+        $rentalCents = (int) round((float) $this->daily_rate * 100) * $this->total_days;
+        $fuelCents = (int) round(
+            ((float) $this->fuel_liters_used * 100) * ((float) $this->fuel_rate * 100) / 100
         );
-    }
 
+        return round(($rentalCents + $fuelCents) / 100, 2);
+    }
 }

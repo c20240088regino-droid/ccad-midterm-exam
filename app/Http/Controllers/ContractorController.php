@@ -2,64 +2,43 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Contractor;
-use Illuminate\Http\Request;
+use App\Http\Requests\ContractorRequest;
+use App\Services\ContractorService;
+use Illuminate\Http\JsonResponse;
 
 class ContractorController extends Controller
 {
-    /**
-     * Display a listing of the resource.
-     */
-    public function index()
+    public function __construct(private readonly ContractorService $service) {}
+
+    public function index(): JsonResponse
     {
-        //
+        return response()->json($this->service->listContractors());
     }
 
-    /**
-     * Show the form for creating a new resource.
-     */
-    public function create()
+    public function create(): JsonResponse
     {
-        //
+        return response()->json(['contractors' => $this->service->contractorOptions()]);
     }
 
-    /**
-     * Store a newly created resource in storage.
-     */
-    public function store(Request $request)
+    public function store(ContractorRequest $request): JsonResponse
     {
-        //
+        return response()->json($this->service->createContractor($request->validated()), 201);
     }
 
-    /**
-     * Display the specified resource.
-     */
-    public function show(Contractor $contractor)
+    public function show(int $contractor): JsonResponse
     {
-        //
+        return response()->json($this->service->findContractor($contractor));
     }
 
-    /**
-     * Show the form for editing the specified resource.
-     */
-    public function edit(Contractor $contractor)
+    public function update(ContractorRequest $request, int $contractor): JsonResponse
     {
-        //
+        return response()->json($this->service->updateContractor($contractor, $request->validated()));
     }
 
-    /**
-     * Update the specified resource in storage.
-     */
-    public function update(Request $request, Contractor $contractor)
+    public function destroy(int $contractor): JsonResponse
     {
-        //
-    }
+        $this->service->deleteContractor($contractor);
 
-    /**
-     * Remove the specified resource from storage.
-     */
-    public function destroy(Contractor $contractor)
-    {
-        //
+        return response()->json(['message' => 'Contractor deleted.']);
     }
 }

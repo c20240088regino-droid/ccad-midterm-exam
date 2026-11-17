@@ -24,6 +24,18 @@ class UpdateHeavyEquipmentRequest extends FormRequest
         ];
     }
 
+    protected function prepareForValidation(): void
+    {
+        if ($this->has('equipment_tag') && is_string($this->input('equipment_tag'))) {
+            $this->merge(['equipment_tag' => mb_strtoupper(trim($this->input('equipment_tag')))]);
+        }
+
+        if ($this->has('machine_model') && is_string($this->input('machine_model'))) {
+            $model = preg_replace('/\\s+/u', ' ', strip_tags($this->input('machine_model'))) ?? '';
+            $this->merge(['machine_model' => trim($model)]);
+        }
+    }
+
     public function messages(): array
     {
         return [

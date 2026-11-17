@@ -1,7 +1,7 @@
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
 import { Head, router } from '@inertiajs/react';
-import { CalendarDays, CircleCheck, ClipboardList, Construction, Pencil, Plus, Trash2, Truck, Wrench, X } from 'lucide-react';
+import { CalendarDays, CircleCheck, ClipboardList, Construction, Plus, Truck, Wrench } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -18,25 +18,9 @@ interface DashboardProps {
         available: number;
         maintenance: number;
     };
-    rentals: Rental[];
     equipmentOptions: EquipmentOption[];
     contractors: ContractorOption[];
     projectSites: ProjectSiteOption[];
-}
-
-interface Rental {
-    id: number;
-    heavy_equipment_id: number;
-    contractor_id: number;
-    project_site_id: number;
-    start_date: string;
-    end_date: string;
-    fuel_liters_used: number | string;
-    fuel_rate: number | string;
-    total_rental_cost: number | string;
-    heavy_equipment: { equipment_tag: string; machine_model: string };
-    contractor: { contractor_name: string };
-    project_site: { project_site: string };
 }
 
 interface EquipmentOption {
@@ -44,6 +28,7 @@ interface EquipmentOption {
     equipment_tag: string;
     machine_model: string;
     daily_rate: number | string;
+    machine_status: 'Available' | 'Rented' | 'Maintenance';
 }
 
 interface ContractorOption {
@@ -66,12 +51,17 @@ interface RentalFormState {
     fuel_rate: string;
 }
 
+const localDateString = () => {
+    const date = new Date();
+    return [date.getFullYear(), String(date.getMonth() + 1).padStart(2, '0'), String(date.getDate()).padStart(2, '0')].join('-');
+};
+
 const emptyRentalForm = (): RentalFormState => ({
     heavy_equipment_id: '',
     contractor_id: '',
     project_site_id: '',
-    start_date: new Date().toISOString().slice(0, 10),
-    end_date: new Date().toISOString().slice(0, 10),
+    start_date: localDateString(),
+    end_date: localDateString(),
     fuel_liters_used: '0',
     fuel_rate: '',
 });
@@ -104,9 +94,8 @@ const monthLabel = new Intl.DateTimeFormat('en', {
     year: 'numeric',
 }).format(new Date()).toUpperCase();
 
-export default function Dashboard({ stats, rentals, equipmentOptions, contractors, projectSites }: DashboardProps) {
+export default function Dashboard({ stats, equipmentOptions, contractors, projectSites }: DashboardProps) {
     const [form, setForm] = useState<RentalFormState>(emptyRentalForm);
-    const [editingId, setEditingId] = useState<number | null>(null);
     const [contractorName, setContractorName] = useState('');
     const [siteName, setSiteName] = useState('');
     const [busy, setBusy] = useState(false);
@@ -120,18 +109,12 @@ export default function Dashboard({ stats, rentals, equipmentOptions, contractor
         { label: 'Maintenance', value: stats.maintenance, Icon: Wrench, color: 'text-amber-400' },
     ];
 
-    const refreshDashboard = (only: string[] = ['stats', 'rentals', 'equipmentOptions']) => {
+    const refreshDashboard = (only: string[] = ['stats', 'equipmentOptions']) => {
         router.reload({ only });
     };
 
     const updateForm = (field: keyof RentalFormState, value: string) => {
         setForm((current) => ({ ...current, [field]: value }));
-    };
-
-    const resetForm = () => {
-        setForm(emptyRentalForm());
-        setEditingId(null);
-        setError('');
     };
 
     const submitRental = async (event: FormEvent<HTMLFormElement>) => {
@@ -141,49 +124,16 @@ export default function Dashboard({ stats, rentals, equipmentOptions, contractor
         setMessage('');
 
         try {
-            await sendJson(editingId ? `/equipment-rentals/${editingId}` : '/equipment-rentals', editingId ? 'PUT' : 'POST', {
+            await sendJson('/equipment-rentals', 'POST', {
                 ...form,
                 fuel_liters_used: Number(form.fuel_liters_used),
                 fuel_rate: Number(form.fuel_rate),
             });
-            setMessage(editingId ? 'Rental updated successfully.' : 'Rental added successfully.');
-            resetForm();
+            setMessage('Rental added successfully.');
+            setForm(emptyRentalForm());
             refreshDashboard();
         } catch (requestError) {
             setError(requestError instanceof Error ? requestError.message : 'The rental could not be saved.');
-        } finally {
-            setBusy(false);
-        }
-    };
-
-    const editRental = (rental: Rental) => {
-        setEditingId(rental.id);
-        setError('');
-        setMessage('');
-        setForm({
-            heavy_equipment_id: String(rental.heavy_equipment_id),
-            contractor_id: String(rental.contractor_id),
-            project_site_id: String(rental.project_site_id),
-            start_date: rental.start_date.slice(0, 10),
-            end_date: rental.end_date.slice(0, 10),
-            fuel_liters_used: String(rental.fuel_liters_used),
-            fuel_rate: String(rental.fuel_rate),
-        });
-        document.getElementById('rental-form')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    };
-
-    const deleteRental = async (rental: Rental) => {
-        if (!window.confirm(`Delete the rental for ${rental.contractor.contractor_name}?`)) return;
-        setBusy(true);
-        setError('');
-        setMessage('');
-        try {
-            await sendJson(`/equipment-rentals/${rental.id}`, 'DELETE');
-            setMessage('Rental deleted successfully.');
-            if (editingId === rental.id) resetForm();
-            refreshDashboard();
-        } catch (requestError) {
-            setError(requestError instanceof Error ? requestError.message : 'The rental could not be deleted.');
         } finally {
             setBusy(false);
         }
@@ -259,14 +209,10 @@ export default function Dashboard({ stats, rentals, equipmentOptions, contractor
                 <section id="rental-form" className="mt-5 rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
                     <div className="mb-4 flex items-center justify-between gap-3">
                         <div>
-                            <h2 className="text-lg font-semibold text-slate-900">{editingId ? 'Edit rental' : 'Add a rental'}</h2>
+                            <h2 className="text-lg font-semibold text-slate-900">Add a rental</h2>
                             <p className="text-sm text-slate-500">Record who is renting equipment and where it will be used.</p>
                         </div>
-                        {editingId ? (
-                            <button type="button" onClick={resetForm} className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-sm text-slate-600 hover:bg-slate-100">
-                                <X className="size-4" /> Cancel
-                            </button>
-                        ) : <Plus className="size-5 text-slate-400" aria-hidden="true" />}
+                        <Plus className="size-5 text-slate-400" aria-hidden="true" />
                     </div>
 
                     <form onSubmit={submitRental} className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -275,7 +221,9 @@ export default function Dashboard({ stats, rentals, equipmentOptions, contractor
                             <select className={fieldClass} value={form.heavy_equipment_id} onChange={(event) => updateForm('heavy_equipment_id', event.target.value)} required>
                                 <option value="">Select equipment</option>
                                 {equipmentOptions.map((equipment) => (
-                                    <option key={equipment.id} value={equipment.id}>{equipment.equipment_tag} — {equipment.machine_model} (${Number(equipment.daily_rate).toFixed(2)}/day)</option>
+                                    <option key={equipment.id} value={equipment.id} disabled={equipment.machine_status === 'Maintenance' && form.heavy_equipment_id !== String(equipment.id)}>
+                                        {equipment.equipment_tag} — {equipment.machine_model} (${Number(equipment.daily_rate).toFixed(2)}/day){equipment.machine_status === 'Maintenance' ? ' · Maintenance' : ''}
+                                    </option>
                                 ))}
                             </select>
                         </label>
@@ -319,7 +267,7 @@ export default function Dashboard({ stats, rentals, equipmentOptions, contractor
                         </label>
                         <div className="flex items-center gap-3 sm:col-span-2 lg:col-span-4">
                             <button type="submit" disabled={busy || !equipmentOptions.length} className="rounded-md bg-[#192858] px-4 py-2 text-sm font-semibold text-white hover:bg-[#24396f] disabled:cursor-not-allowed disabled:opacity-60">
-                                {busy ? 'Saving…' : editingId ? 'Save changes' : 'Create rental'}
+                                {busy ? 'Saving…' : 'Create rental'}
                             </button>
                             {!equipmentOptions.length && <span className="text-sm text-amber-700">Add equipment before creating a rental.</span>}
                         </div>
@@ -328,51 +276,6 @@ export default function Dashboard({ stats, rentals, equipmentOptions, contractor
                     {message && <p role="status" className="mt-3 rounded-md bg-green-50 px-3 py-2 text-sm text-green-700">{message}</p>}
                 </section>
 
-                <section className="mt-5 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-                    <div className="border-b border-slate-200 px-4 py-4 sm:px-6">
-                        <h2 className="text-lg font-semibold text-slate-900">Recent rentals</h2>
-                        <p className="text-sm text-slate-500">Edit or remove a rental record at any time.</p>
-                    </div>
-                    {rentals.length ? (
-                        <div className="overflow-x-auto">
-                            <table className="w-full min-w-[760px] text-left text-sm">
-                                <thead className="bg-slate-50 text-xs font-semibold tracking-wide text-slate-500 uppercase">
-                                    <tr>
-                                        <th className="px-4 py-3 sm:px-6">Renter</th>
-                                        <th className="px-4 py-3">Equipment</th>
-                                        <th className="px-4 py-3">Project site</th>
-                                        <th className="px-4 py-3">Rental dates</th>
-                                        <th className="px-4 py-3">Total</th>
-                                        <th className="px-4 py-3 text-right sm:px-6">Actions</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-slate-100">
-                                    {rentals.map((rental) => (
-                                        <tr key={rental.id} className="text-slate-700 hover:bg-slate-50/70">
-                                            <td className="px-4 py-3 font-medium text-slate-900 sm:px-6">{rental.contractor.contractor_name}</td>
-                                            <td className="px-4 py-3"><span className="font-medium">{rental.heavy_equipment.equipment_tag}</span><span className="block text-xs text-slate-500">{rental.heavy_equipment.machine_model}</span></td>
-                                            <td className="px-4 py-3">{rental.project_site.project_site}</td>
-                                            <td className="px-4 py-3 whitespace-nowrap">{rental.start_date.slice(0, 10)} – {rental.end_date.slice(0, 10)}</td>
-                                            <td className="px-4 py-3 font-medium">${Number(rental.total_rental_cost).toFixed(2)}</td>
-                                            <td className="px-4 py-3 text-right sm:px-6">
-                                                <div className="inline-flex gap-1">
-                                                    <button type="button" onClick={() => editRental(rental)} aria-label={`Edit rental for ${rental.contractor.contractor_name}`} className="rounded-md p-2 text-slate-600 hover:bg-blue-50 hover:text-blue-700"><Pencil className="size-4" /></button>
-                                                    <button type="button" onClick={() => deleteRental(rental)} disabled={busy} aria-label={`Delete rental for ${rental.contractor.contractor_name}`} className="rounded-md p-2 text-slate-600 hover:bg-red-50 hover:text-red-700 disabled:opacity-50"><Trash2 className="size-4" /></button>
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
-                    ) : (
-                        <div className="px-6 py-10 text-center">
-                            <ClipboardList className="mx-auto size-8 text-slate-300" />
-                            <p className="mt-2 font-medium text-slate-700">No rentals yet</p>
-                            <p className="mt-1 text-sm text-slate-500">Use the form above to add your first equipment rental.</p>
-                        </div>
-                    )}
-                </section>
             </main>
         </AppLayout>
     );

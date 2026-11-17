@@ -26,6 +26,26 @@ class DatabaseSeeder extends Seeder
             ],
         );
 
+        $admin = User::query()->where('email', 'admin1@gmail.com')->first()
+            ?? User::query()->where('email', 'admin@example.com')->first()
+            ?? User::query()->where('role', 'admin')->first();
+
+        if ($admin) {
+            $admin->forceFill([
+                'name' => 'Admin User',
+                'email' => 'admin1@gmail.com',
+                'password' => 'admin12345',
+                'role' => 'admin',
+            ])->save();
+        } else {
+            User::query()->create([
+                'name' => 'Admin User',
+                'email' => 'admin1@gmail.com',
+                'password' => 'admin12345',
+                'role' => 'admin',
+            ]);
+        }
+
         $equipment = [
             ['equipment_tag' => 'EXC-001', 'machine_model' => 'Komatsu PC210 Excavator', 'daily_rate' => 450],
             ['equipment_tag' => 'DZ-001', 'machine_model' => 'Caterpillar D6 Dozer', 'daily_rate' => 600],

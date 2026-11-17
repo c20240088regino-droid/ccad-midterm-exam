@@ -2,64 +2,43 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\ProjectSite;
-use Illuminate\Http\Request;
+use App\Http\Requests\ProjectSiteRequest;
+use App\Services\ProjectSiteService;
+use Illuminate\Http\JsonResponse;
 
 class ProjectSiteController extends Controller
 {
-    /**
-     * Display a listing of the resource.
-     */
-    public function index()
+    public function __construct(private readonly ProjectSiteService $service) {}
+
+    public function index(): JsonResponse
     {
-        //
+        return response()->json($this->service->listSites());
     }
 
-    /**
-     * Show the form for creating a new resource.
-     */
-    public function create()
+    public function create(): JsonResponse
     {
-        //
+        return response()->json(['project_sites' => $this->service->siteOptions()]);
     }
 
-    /**
-     * Store a newly created resource in storage.
-     */
-    public function store(Request $request)
+    public function store(ProjectSiteRequest $request): JsonResponse
     {
-        //
+        return response()->json($this->service->createSite($request->validated()), 201);
     }
 
-    /**
-     * Display the specified resource.
-     */
-    public function show(ProjectSite $projectSite)
+    public function show(int $project_site): JsonResponse
     {
-        //
+        return response()->json($this->service->findSite($project_site));
     }
 
-    /**
-     * Show the form for editing the specified resource.
-     */
-    public function edit(ProjectSite $projectSite)
+    public function update(ProjectSiteRequest $request, int $project_site): JsonResponse
     {
-        //
+        return response()->json($this->service->updateSite($project_site, $request->validated()));
     }
 
-    /**
-     * Update the specified resource in storage.
-     */
-    public function update(Request $request, ProjectSite $projectSite)
+    public function destroy(int $project_site): JsonResponse
     {
-        //
-    }
+        $this->service->deleteSite($project_site);
 
-    /**
-     * Remove the specified resource from storage.
-     */
-    public function destroy(ProjectSite $projectSite)
-    {
-        //
+        return response()->json(['message' => 'Project site deleted.']);
     }
 }

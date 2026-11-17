@@ -2,48 +2,43 @@
 
 namespace App\Services;
 
+use App\Models\Contractor;
 use App\Models\EquipmentRental;
 use App\Models\HeavyEquipment;
+use App\Models\ProjectSite;
 use Carbon\CarbonImmutable;
+use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 class EquipmentRentalService
 {
-    public function createEquipment(array $data): HeavyEquipment
+    public function listRentals(int $perPage = 15): LengthAwarePaginator
     {
-        return DB::transaction(function () use ($data): HeavyEquipment {
-            $data = $this->cleanText($data, ['equipment_tag', 'machine_model']);
-            $data['equipment_tag'] = mb_strtoupper($data['equipment_tag']);
-            $data['machine_status'] ??= 'Available';
-
-            return HeavyEquipment::create($data);
-        });
+        return EquipmentRental::query()
+            ->with(['heavyEquipment', 'contractor', 'projectSite'])
+            ->latest()
+            ->paginate($perPage);
     }
 
-    public function updateEquipment(int $id, array $data): HeavyEquipment
+    public function rentalFormOptions(): array
     {
-        return DB::transaction(function () use ($id, $data): HeavyEquipment {
-            $equipment = HeavyEquipment::query()->lockForUpdate()->findOrFail($id);
-            $data = $this->cleanText($data, ['equipment_tag', 'machine_model']);
+        return [
+            'equipment' => HeavyEquipment::query()
+                ->where('machine_status', '!=', 'Maintenance')
+                ->orderBy('equipment_tag')
+                ->get(),
+            'contractors' => Contractor::query()->orderBy('contractor_name')->get(),
+            'project_sites' => ProjectSite::query()->orderBy('project_site')->get(),
+        ];
+    }
 
-            if (isset($data['equipment_tag'])) {
-                $data['equipment_tag'] = mb_strtoupper($data['equipment_tag']);
-            }
-
-            if (isset($data['machine_status']) && ($equipment->machine_status === 'Rented'
-                || $equipment->rentals()->whereDate('start_date', '<=', now()->toDateString())
-                    ->whereDate('end_date', '>=', now()->toDateString())->exists())) {
-                throw ValidationException::withMessages([
-                    'machine_status' => 'Equipment with an active rental cannot be manually marked available or under maintenance.',
-                ]);
-            }
-
-            $equipment->update($data);
-
-            return $equipment->refresh();
-        });
+    public function findRental(int $id): EquipmentRental
+    {
+        return EquipmentRental::query()
+            ->with(['heavyEquipment', 'contractor', 'projectSite'])
+            ->findOrFail($id);
     }
 
     public function createRental(array $data): EquipmentRental
@@ -71,7 +66,7 @@ class EquipmentRentalService
     public function updateRental(int $id, array $data): EquipmentRental
     {
         return DB::transaction(function () use ($id, $data): EquipmentRental {
-            $rental = EquipmentRental::query()->findOrFail($id);
+            $rental = EquipmentRental::query()->lockForUpdate()->findOrFail($id);
             $oldEquipmentId = (int) $rental->heavy_equipment_id;
             $data = array_replace($rental->only([
                 'heavy_equipment_id', 'contractor_id', 'project_site_id', 'start_date', 'end_date',
@@ -86,16 +81,21 @@ class EquipmentRentalService
             }
 
             $targetEquipment = $equipment->get((int) $data['heavy_equipment_id']);
-            if ($targetEquipment->machine_status === 'Maintenance') {
-                throw ValidationException::withMessages([
-                    'heavy_equipment_id' => 'Equipment under maintenance cannot be rented.',
-                ]);
-            }
-
             if ((int) $data['heavy_equipment_id'] !== $oldEquipmentId) {
                 $data['daily_rate'] = $targetEquipment->daily_rate;
             }
             $data = $this->normalizeRentalData($data, $targetEquipment);
+
+            $datesChanged = $data['start_date'] !== CarbonImmutable::parse($rental->start_date)->toDateString()
+                || $data['end_date'] !== CarbonImmutable::parse($rental->end_date)->toDateString();
+
+            if ($targetEquipment->machine_status === 'Maintenance'
+                && ((int) $data['heavy_equipment_id'] !== $oldEquipmentId || $datesChanged)) {
+                throw ValidationException::withMessages([
+                    'heavy_equipment_id' => 'Equipment under maintenance cannot be assigned to a rental schedule.',
+                ]);
+            }
+
             $this->assertNoDateConflict($data, $rental->id);
             $rental->update($data);
 
@@ -166,14 +166,4 @@ class EquipmentRentalService
         }
     }
 
-    private function cleanText(array $data, array $fields): array
-    {
-        foreach ($fields as $field) {
-            if (isset($data[$field])) {
-                $data[$field] = trim(preg_replace('/\s+/u', ' ', strip_tags($data[$field])) ?? '');
-            }
-        }
-
-        return $data;
-    }
 }

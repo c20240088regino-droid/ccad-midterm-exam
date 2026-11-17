@@ -11,6 +11,6 @@ class Contractor extends Model
 
     public function rentals(): HasMany
     {
-        return $this->hasMany(equipmentRental::class);
+        return $this->hasMany(EquipmentRental::class);
     }
 }

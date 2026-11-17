@@ -30,6 +30,22 @@ class AuthenticationTest extends TestCase
         $response->assertRedirect(route('dashboard', absolute: false));
     }
 
+    public function test_admin_users_are_redirected_to_the_admin_dashboard_after_login()
+    {
+        $user = User::factory()->create([
+            'role' => 'admin',
+            'password' => bcrypt('admin123'),
+        ]);
+
+        $response = $this->post('/login', [
+            'email' => $user->email,
+            'password' => 'admin123',
+        ]);
+
+        $this->assertAuthenticated();
+        $response->assertRedirect(route('admin.dashboard', absolute: false));
+    }
+
     public function test_users_can_not_authenticate_with_invalid_password()
     {
         $user = User::factory()->create();
